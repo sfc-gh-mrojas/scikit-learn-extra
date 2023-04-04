@@ -33,7 +33,7 @@ from .mean_estimators import median_of_means_blocked, block_mom, huber
 from ._robust_weighted_estimator_helper import _kmeans_loss
 
 
-# cython implementation of loss functions, copied from scikit-learn with light
+# implementation of loss functions, copied from scikit-learn with light
 # modifications.
 from ._robust_weighted_estimator_helper import (
     _kmeans_loss,

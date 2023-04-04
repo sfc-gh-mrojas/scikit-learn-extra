@@ -1,4 +1,4 @@
-# cython: language_level=3
+import numba
 
 """ Implementation of the Fast Hadamard Transform.
 
@@ -16,10 +16,8 @@ https://github.com/nbarbey/fht
 
 
 import numpy as np
-cimport numpy as np
-cimport cython
-from libc.math cimport log2
-
+from math import log2
+ 
 def is_power_of_two(input_integer):
     """ Test if an integer is a power of two. """
     if input_integer == 1:
@@ -30,9 +28,9 @@ def is_power_of_two(input_integer):
 def pure_python_fht(array_):
     """ Pure Python implementation for educational purposes. """
     bit = length = len(array_)
-    for _ in xrange(int(np.log2(length))):
+    for _ in range(int(np.log2(length))):
         bit >>= 1
-        for i in xrange(length):
+        for i in range(length):
             if i & bit == 0:
                 j = i | bit
                 temp = array_[i]
@@ -40,7 +38,7 @@ def pure_python_fht(array_):
                 array_[j] = temp - array_[j]
 
 
-def fht(cython.floating[::1] array_):
+def fht(array_):
     """ Single dimensional FHT. """
     if not is_power_of_two(array_.shape[0]):
         raise ValueError('Length of input for fht must be a power of two')
@@ -48,21 +46,25 @@ def fht(cython.floating[::1] array_):
         _fht(array_)
 
 
-@cython.boundscheck(False)
-cdef void _fht(cython.floating[::1] array_) nogil:
-    cdef unsigned int bit, length, _, i, j
-    cdef cython.floating temp
+@numba.jit()
+def _fht(array_):
+    bit:int=0
+    length:int=0
+    i:int=0 
+    j:int=0
+    temp:float=0.0
     bit = length = array_.shape[0]
-    for _ in xrange(<unsigned int>(log2(length))):
+    for _ in range((log2(length))):
         bit >>= 1
-        for i in xrange(length):
+        for i in range(length):
             if i & bit == 0:
                 j = i | bit
                 temp = array_[i]
                 array_[i] += array_[j]
                 array_[j] = temp - array_[j]
 
-def fht2(cython.floating[:, ::1] array_):
+@numba.jit()
+def fht2(array_):
     """ Two dimensional row-wise FHT. """
     if not is_power_of_two(array_.shape[1]):
         raise ValueError('Length of rows for fht2 must be a power of two')
@@ -70,11 +72,8 @@ def fht2(cython.floating[:, ::1] array_):
         _fht2(array_)
 
 
-@cython.boundscheck(False)
-cdef void _fht2(cython.floating[:, ::1] array_) nogil:
-    cdef unsigned int n
+
+def _fht2(array_):
     n = array_.shape[0]
-    for x in xrange(n):
-        # TODO: This call still shows up as yellow in cython -a presumably due
-        # to the [] access, but the array_ is already typed...
+    for x in range(n):
         _fht(array_[x])

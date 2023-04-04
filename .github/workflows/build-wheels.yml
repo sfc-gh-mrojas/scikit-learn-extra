@@ -55,7 +55,7 @@ jobs:
           python-version: '3.8'
 
       - name: Install dependencies
-        run: pip install setuptools cython numpy
+        run: pip install setuptools numpy numba
 
       - name: Build sdist
         run: python setup.py sdist

@@ -1,31 +1,31 @@
-# cython: infer_types=True
+import numba
 # Fast swap step and build step in PAM algorithm for k_medoid.
 # Author: Timothée Mathieu
 # License: 3-clause BSD
 
-cimport cython
 
 import numpy as np
-cimport numpy as np
-from cython cimport floating, integral
 
-@cython.boundscheck(False)  # Deactivate bounds checking
-def _compute_optimal_swap( floating[:,:] D,
-                           int[:] medoid_idxs,
-                           int[:] not_medoid_idxs,
-                           floating[:] Djs,
-                           floating[:] Ejs,
-                           int n_clusters):
+
+@numba.jit()
+def _compute_optimal_swap(D,medoid_idxs,not_medoid_idxs,Djs,Ejs,n_clusters:int):
     """Compute best cost change for all the possible swaps."""
 
     # Initialize best cost change and the associated swap couple.
-    cdef (int, int, floating) best_cost_change = (1, 1, 0.0)
-    cdef int sample_size = len(D)
-    cdef int i, j, h, id_i, id_h, id_j
-    cdef floating cost_change
-    cdef int not_medoid_shape = sample_size - n_clusters
-    cdef bint cluster_i_bool, not_cluster_i_bool, second_best_medoid
-    cdef bint not_second_best_medoid
+    best_cost_change = (1, 1, 0.0)
+    sample_size = len(D)
+    i=0
+    j=0
+    h=0
+    id_i=0
+    id_h=0
+    id_j=0
+    cost_change=0.0
+    not_medoid_shape = sample_size - n_clusters
+    cluster_i_bool=0
+    not_cluster_i_bool=0
+    second_best_medoid=0
+    not_second_best_medoid=0
 
     # Compute the change in cost for each swap.
     for h in range(not_medoid_shape):
@@ -68,24 +68,27 @@ def _compute_optimal_swap( floating[:,:] D,
 
 
 
-
-def _build( floating[:, :] D, int n_clusters):
+@numba.jit()
+def _build( D, n_clusters:int):
     """Compute BUILD initialization, a greedy medoid initialization."""
 
-    cdef int[:] medoid_idxs = np.zeros(n_clusters, dtype = np.intc)
-    cdef int sample_size = len(D)
-    cdef int[:] not_medoid_idxs = np.arange(sample_size, dtype = np.intc)
-    cdef int i, j,  id_i, id_j
+    medoid_idxs = np.zeros(n_clusters, dtype = np.intc)
+    sample_size = len(D)
+    not_medoid_idxs = np.arange(sample_size, dtype = np.intc)
+    i=0
+    j=0
+    id_i=0
+    id_j=0
 
     medoid_idxs[0] = np.argmin(np.sum(D,axis=0))
     not_medoid_idxs = np.delete(not_medoid_idxs, medoid_idxs[0])
 
-    cdef int n_medoids_current = 1
+    n_medoids_current = 1
 
-    cdef floating[:] Dj = D[medoid_idxs[0]].copy()
-    cdef floating cost_change
-    cdef (int, int) new_medoid = (0,0)
-    cdef floating cost_change_max
+    Dj = D[medoid_idxs[0]].copy()
+    cost_change=0.0
+    new_medoid = (0,0)
+    cost_change_max=0.0
 
     for _ in range(n_clusters -1):
         cost_change_max = 0

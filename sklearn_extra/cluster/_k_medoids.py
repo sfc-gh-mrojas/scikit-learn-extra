@@ -20,7 +20,7 @@ from sklearn.utils.extmath import stable_cumsum
 from sklearn.utils.validation import check_is_fitted
 from sklearn.exceptions import ConvergenceWarning
 
-# cython implementation of steps in PAM algorithm.
+
 from ._k_medoids_helper import _compute_optimal_swap, _build
 
 

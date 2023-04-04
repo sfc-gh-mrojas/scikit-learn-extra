@@ -1,22 +1,16 @@
+import numba
 # Fast inner loop for CNN.
 # Author: Jan-Oliver Joswig
 # License: 3-clause BSD
 #
-# cython: boundscheck = False
-# cython: wraparound = False
 
-cimport cython
-from libcpp.queue cimport queue as cppqueue
-cimport numpy as np
+from queue import Queue as cppqueue
+import numpy as np
 
 
-ctypedef np.intp_t ARRAYINDEX_DTYPE_t
 
-
-cdef inline bint check_similarity(
-        ARRAYINDEX_DTYPE_t[::1] a, ARRAYINDEX_DTYPE_t sa,
-        ARRAYINDEX_DTYPE_t[::1] b,
-        ARRAYINDEX_DTYPE_t c):
+@numba.jit()
+def check_similarity(a, sa,b,c):
     """Check if the CNN criterion is fullfilled
 
     Check if `a` and `b` have at least `c` common elements.  Faster than
@@ -35,9 +29,12 @@ cdef inline bint check_similarity(
         True (1) or False (0)
     """
 
-    cdef ARRAYINDEX_DTYPE_t i, j, sb = b.shape[0]  # Control variables
-    cdef ARRAYINDEX_DTYPE_t ai, bj                 # Checked elements
-    cdef ARRAYINDEX_DTYPE_t common = 0             # Common neighbors count
+    i=0
+    j=0
+    sb = b.shape[0]  # Control variables
+    ai=None
+    bj=None                 # Checked elements
+    common = 0             # Common neighbors count
 
     if c == 0:
         return 1
@@ -54,19 +51,20 @@ cdef inline bint check_similarity(
                 break
     return 0
 
+@numba.jit()
+def commonnn_inner(neighborhoods,labels,core_candidates,min_samples):
 
-def commonnn_inner(
-        object[::1] neighborhoods,
-        ARRAYINDEX_DTYPE_t[::1] labels,
-        np.uint8_t[::1] core_candidates,
-        ARRAYINDEX_DTYPE_t min_samples):
-
-    cdef ARRAYINDEX_DTYPE_t init_point, point, member, member_i
-    cdef ARRAYINDEX_DTYPE_t m, n = neighborhoods.shape[0]
-    cdef ARRAYINDEX_DTYPE_t[::1] neighbors, neighbor_neighbors
-    cdef ARRAYINDEX_DTYPE_t current = 0  # Cluster (start at 0; noise = -1)
-    cdef unsigned long membercount       # Current cluster size
-    cdef cppqueue[ARRAYINDEX_DTYPE_t] q  # FIFO queue
+    init_point=0
+    point=0
+    member=0
+    member_i=0
+    m = 0
+    n = neighborhoods.shape[0]
+    neighbors = None
+    neighbor_neighbors=None
+    current = 0  # Cluster (start at 0; noise = -1)
+    membercount=0       # Current cluster size
+    q = cppqueue() # FIFO queue
 
     # BFS find connected components
     for init_point in range(n):
@@ -96,7 +94,7 @@ def commonnn_inner(
                     core_candidates[member] = 0  # Point included
                     labels[member] = current     # Assign cluster label
                     membercount += 1             # Cluster grows
-                    q.push(member)               # Add point to queue
+                    q.put(member)               # Add point to queue
 
             if q.empty():
                 # No points left to check
@@ -106,8 +104,9 @@ def commonnn_inner(
                     current -= 1             # Revert cluster number
                 break
 
-            point = q.front()  # Get the next point from the queue
-            q.pop()
+            point = q.get()  # Get the next point from the queue
+            if not q.empty():
+                q.get()
 
             neighbors = neighborhoods[point]
             m = neighbors.shape[0]

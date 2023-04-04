@@ -1,36 +1,22 @@
-# cython: infer_types=True
-# Fast swap step in PAM algorithm for k_medoid.
-# Author: Timothée Mathieu
-# License: 3-clause BSD
-
-cimport cython
+import numba
 import numpy as np
-cimport numpy as np
 
 from sklearn.utils.extmath import row_norms
-from cython cimport floating
 
 import sys
 from time import time
-
-from libc.math cimport exp, log, sqrt, pow, fabs
-cimport numpy as np
-from numpy.math cimport INFINITY
-
+from math import exp, log
 
 # Modified from sklearn.cluster._k_means_fast.pyx
 np.import_array()
 
-cdef floating _euclidean_dense_dense(
-        floating* a,  # IN
-        floating* b,  # IN
-        int n_features) nogil:
+@numba.jit()
+def _euclidean_dense_dense(a:float, b:float, n_features:int):
     """Euclidean distance between a dense and b dense"""
-    cdef:
-        int i
-        int n = n_features // 4
-        int rem = n_features % 4
-        floating result = 0
+    i:int=0
+    n:int = n_features // 4
+    rem:int = n_features % 4
+    result:float = 0
 
     # We manually unroll the loop for better cache optimization.
     for i in range(n):
@@ -46,28 +32,21 @@ cdef floating _euclidean_dense_dense(
     return result
 
 
-
-cpdef np.ndarray[floating] _kmeans_loss(np.ndarray[floating, ndim=2, mode='c'] X,
-                                        int[:] labels):
+@numba.jit()
+def _kmeans_loss(X,labels):
     """Compute inertia
 
     squared distancez between each sample and its assigned center.
     """
-    if floating is float:
-        dtype = np.float32
-    elif floating is double:
-        dtype = np.double
-
-    cdef:
-        int n_samples = X.shape[0]
-        int n_features = X.shape[1]
-        int i, j
-        int n_classes = len(np.unique(labels))
-        np.ndarray[floating, ndim=2] centers = np.zeros([n_classes,
-                                                         n_features],
-                                                         dtype = dtype)
-        np.ndarray[long] num_in_cluster = np.zeros(n_classes, dtype = int)
-        np.ndarray[floating] inertias = np.zeros(n_samples, dtype = dtype)
+    dtype = np.double
+    n_samples:int = X.shape[0]
+    n_features:int = X.shape[1]
+    i:int = 0
+    j:int = 0
+    n_classes:int = len(np.unique(labels))
+    centers = np.zeros([n_classes,n_features],dtype = dtype)
+    num_in_cluster = np.zeros(n_classes, dtype = int)
+    inertias = np.zeros(n_samples, dtype = dtype)
     for i in range(n_samples):
         for j in range(n_features):
             centers[labels[i], j] += X[i, j]
@@ -79,7 +58,7 @@ cpdef np.ndarray[floating] _kmeans_loss(np.ndarray[floating, ndim=2, mode='c'] X
 
     for i in range(n_samples):
         j = labels[i]
-        inertias[i] = _euclidean_dense_dense(&X[i, 0], &centers[j, 0], n_features)
+        inertias[i] = _euclidean_dense_dense(X[i, 0], centers[j, 0], n_features)
     return inertias
 
 
@@ -95,10 +74,10 @@ cpdef np.ndarray[floating] _kmeans_loss(np.ndarray[floating, ndim=2, mode='c'] X
 # Extension Types for Loss Functions
 # ----------------------------------------
 
-cdef class LossFunction:
+class LossFunction:
     """Base class for convex loss functions"""
-
-    cdef double loss(self, double p, double y) nogil:
+    @numba.jit()
+    def loss(self, p:float, y:float):
         """Evaluate the loss function.
 
         Parameters
@@ -115,22 +94,22 @@ cdef class LossFunction:
         """
         return 0.
 
-    def py_dloss(self, double p, double y):
+    def py_dloss(self, p:float, y:float):
         """Python version of `dloss` for testing.
 
         Pytest needs a python function and can't use cdef functions.
         """
         return self.dloss(p, y)
 
-    def py_loss(self, double p, double y):
+    def py_loss(self, p:float, y:float):
         """Python version of `dloss` for testing.
 
         Pytest needs a python function and can't use cdef functions.
         """
         return self.loss(p, y)
 
-
-    cdef double dloss(self, double p, double y) nogil:
+    @numba.jit()
+    def dloss(self, p:float, y:float):
         """Evaluate the derivative of the loss function with respect to
         the prediction `p`.
 
@@ -148,27 +127,27 @@ cdef class LossFunction:
         return 0.
 
 
-cdef class Regression(LossFunction):
+class Regression(LossFunction):
     """Base class for loss functions for regression"""
 
-    cdef double loss(self, double p, double y) nogil:
+    def loss(self, p:float, y:float)->float:
         return 0.
 
-    cdef double dloss(self, double p, double y) nogil:
+    def dloss(self, p:float, y:float)->float:
         return 0.
 
 
-cdef class Classification(LossFunction):
+class Classification(LossFunction):
     """Base class for loss functions for classification"""
 
-    cdef double loss(self, double p, double y) nogil:
+    def loss(self, p:float, y:float)->float:
         return 0.
 
-    cdef double dloss(self, double p, double y) nogil:
+    def dloss(self, p:float, y:float)->float:
         return 0.
 
 
-cdef class ModifiedHuber(Classification):
+class ModifiedHuber(Classification):
     """Modified Huber loss for binary classification with y in {-1, 1}
 
     This is equivalent to quadratically smoothed SVM with gamma = 2.
@@ -176,17 +155,18 @@ cdef class ModifiedHuber(Classification):
     See T. Zhang 'Solving Large Scale Linear Prediction Problems Using
     Stochastic Gradient Descent', ICML'04.
     """
-    cdef double loss(self, double p, double y) nogil:
-        cdef double z = p * y
+    @numba.jit()
+    def loss(self, p:float, y:float):
+        z = p * y
         if z >= 1.0:
             return 0.0
         elif z >= -1.0:
             return (1.0 - z) * (1.0 - z)
         else:
             return -4.0 * z
-
-    cdef double dloss(self, double p, double y) nogil:
-        cdef double z = p * y
+    @numba.jit()
+    def dloss(self, p:float, y:float)->float:
+        z = p * y
         if z >= 1.0:
             return 0.0
         elif z >= -1.0:
@@ -198,7 +178,7 @@ cdef class ModifiedHuber(Classification):
         return ModifiedHuber, ()
 
 
-cdef class Hinge(Classification):
+class Hinge(Classification):
     """Hinge loss for binary classification tasks with y in {-1,1}
 
     Parameters
@@ -209,19 +189,19 @@ cdef class Hinge(Classification):
         When threshold=0.0, one gets the loss used by the Perceptron.
     """
 
-    cdef double threshold
+    threshold=0.0
 
-    def __init__(self, double threshold=1.0):
-        self.threshold = threshold
-
-    cdef double loss(self, double p, double y) nogil:
-        cdef double z = p * y
+    def __init__(self, threshold=1.0):
+        self.threshold = Hinge.threshold
+    @numba.jit()
+    def loss(self, p:float,y:float)->float:
+        z = p * y
         if z <= self.threshold:
             return self.threshold - z
         return 0.0
-
-    cdef double dloss(self, double p, double y) nogil:
-        cdef double z = p * y
+    @numba.jit()
+    def dloss(self, p:float, y:float) ->float:
+        z = p * y
         if z <= self.threshold:
             return -y
         return 0.0
@@ -230,7 +210,7 @@ cdef class Hinge(Classification):
         return Hinge, (self.threshold,)
 
 
-cdef class SquaredHinge(Classification):
+class SquaredHinge(Classification):
     """Squared Hinge loss for binary classification tasks with y in {-1,1}
 
     Parameters
@@ -241,19 +221,19 @@ cdef class SquaredHinge(Classification):
         (quadratically penalized) SVM.
     """
 
-    cdef double threshold
+    threshold=0.0
 
-    def __init__(self, double threshold=1.0):
-        self.threshold = threshold
-
-    cdef double loss(self, double p, double y) nogil:
-        cdef double z = self.threshold - p * y
+    def __init__(self, threshold=1.0):
+        self.threshold = SquaredHinge.threshold
+    @numba.jit()
+    def loss(self, p:float, y:float) ->float:
+        z = self.threshold - p * y
         if z > 0:
             return z * z
         return 0.0
-
-    cdef double dloss(self, double p, double y) nogil:
-        cdef double z = self.threshold - p * y
+    @numba.jit()
+    def dloss(self, p:float, y:float) ->float:
+        z = self.threshold - p * y
         if z > 0:
             return -2 * y * z
         return 0.0
@@ -262,20 +242,20 @@ cdef class SquaredHinge(Classification):
         return SquaredHinge, (self.threshold,)
 
 
-cdef class Log(Classification):
+class Log(Classification):
     """Logistic regression loss for binary classification with y in {-1, 1}"""
-
-    cdef double loss(self, double p, double y) nogil:
-        cdef double z = p * y
+    @numba.jit()
+    def loss(self, p:float, y:float)->float:
+        z = p * y
         # approximately equal and saves the computation of the log
         if z > 18:
             return exp(-z)
         if z < -18:
             return -z
         return log(1.0 + exp(-z))
-
-    cdef double dloss(self, double p, double y) nogil:
-        cdef double z = p * y
+    @numba.jit()
+    def dloss(self, p:float, y:float) ->float:
+        z = p * y
         # approximately equal and saves the computation of the log
         if z > 18.0:
             return exp(-z) * -y
@@ -287,19 +267,20 @@ cdef class Log(Classification):
         return Log, ()
 
 
-cdef class SquaredLoss(Regression):
+class SquaredLoss(Regression):
     """Squared loss traditional used in linear regression."""
-    cdef double loss(self, double p, double y) nogil:
+    @numba.jit()
+    def loss(self, p:float, y:float)->float:
         return 0.5 * (p - y) * (p - y)
-
-    cdef double dloss(self, double p, double y) nogil:
+    @numba.jit()
+    def dloss(self, p:float, y:float)->float:
         return p - y
 
     def __reduce__(self):
         return SquaredLoss, ()
 
 
-cdef class Huber(Regression):
+class Huber(Regression):
     """Huber regression loss
 
     Variant of the SquaredLoss that is robust to outliers (quadratic near zero,
@@ -308,22 +289,22 @@ cdef class Huber(Regression):
     https://en.wikipedia.org/wiki/Huber_Loss_Function
     """
 
-    cdef double c
+    c=0.0
 
-    def __init__(self, double c):
-        self.c = c
-
-    cdef double loss(self, double p, double y) nogil:
-        cdef double r = p - y
-        cdef double abs_r = fabs(r)
+    def __init__(self, c:float):
+        self.c = Huber.c
+    @numba.jit()
+    def loss(self, p:float, y:float) ->float:
+        r = p - y
+        abs_r = abs(r)
         if abs_r <= self.c:
             return 0.5 * r * r
         else:
             return self.c * abs_r - (0.5 * self.c * self.c)
-
-    cdef double dloss(self, double p, double y) nogil:
-        cdef double r = p - y
-        cdef double abs_r = fabs(r)
+    @numba.jit()
+    def dloss(self, p:float, y:float)->float:
+        r = p - y
+        abs_r = abs(r)
         if abs_r <= self.c:
             return r
         elif r > 0.0:

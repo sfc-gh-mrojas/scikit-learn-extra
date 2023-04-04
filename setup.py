@@ -5,8 +5,6 @@ from setuptools import find_packages, setup, Extension
 
 import numpy as np
 
-from Cython.Build import cythonize
-from Cython.Distutils import build_ext
 
 # get __version__ from _version.py
 ver_file = os.path.join("sklearn_extra", "_version.py")
@@ -21,7 +19,7 @@ URL = "https://github.com/scikit-learn-contrib/scikit-learn-extra"
 LICENSE = "new BSD"
 DOWNLOAD_URL = "https://github.com/scikit-learn-contrib/scikit-learn-extra"
 VERSION = __version__  # noqa
-INSTALL_REQUIRES = ["numpy>=1.13.3", "scipy>=0.19.1", "scikit-learn>=0.23.0"]
+INSTALL_REQUIRES = ["numba","numpy>=1.13.3", "scipy>=0.19.1", "scikit-learn>=0.23.0"]
 CLASSIFIERS = [
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
@@ -50,39 +48,6 @@ EXTRAS_REQUIRE = {
         "matplotlib",
     ],
 }
-libraries = []
-if os.name == "posix":
-    libraries.append("m")
-
-args = {
-    "ext_modules": cythonize(
-        [
-            Extension(
-                "sklearn_extra.utils._cyfht",
-                ["sklearn_extra/utils/_cyfht.pyx"],
-                include_dirs=[np.get_include()],
-            ),
-            Extension(
-                "sklearn_extra.cluster._k_medoids_helper",
-                ["sklearn_extra/cluster/_k_medoids_helper.pyx"],
-                include_dirs=[np.get_include()],
-            ),
-            Extension(
-                "sklearn_extra.robust._robust_weighted_estimator_helper",
-                ["sklearn_extra/robust/_robust_weighted_estimator_helper.pyx"],
-                include_dirs=[np.get_include()],
-                libraries=libraries,
-            ),
-            Extension(
-                "sklearn_extra.cluster._commonnn_inner",
-                ["sklearn_extra/cluster/_commonnn_inner.pyx"],
-                include_dirs=[np.get_include()],
-                language="c++",
-            ),
-        ]
-    ),
-    "cmdclass": dict(build_ext=build_ext),
-}
 
 
 setup(
@@ -99,6 +64,5 @@ setup(
     packages=find_packages(),
     install_requires=INSTALL_REQUIRES,
     extras_require=EXTRAS_REQUIRE,
-    python_requires=">=3.6",
-    **args
+    python_requires=">=3.6"
 )
